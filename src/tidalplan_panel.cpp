@@ -627,8 +627,15 @@ void TidalPlanPanel::OnListItemActivated(wxListEvent& event) {
         double   dist  = JsonGetDouble(leg_chunk, "distance_nm");
         double   hdg   = JsonGetDouble(leg_chunk, "heading");
         double   comp  = JsonGetDouble(leg_chunk, "stream_component_kt");
-        wxString src   = JsonGetString(leg_chunk, "station");  // named tidal station
-        if (src.IsEmpty()) src = JsonGetString(leg_chunk, "source");  // fallback: CMEMS
+        // "source" is "cmems" or "station:NAME" — format for display
+        wxString raw_src = JsonGetString(leg_chunk, "source");
+        wxString src;
+        if (raw_src == "cmems")
+            src = "CMEMS";
+        else if (raw_src.StartsWith("station:"))
+            src = raw_src.Mid(8);   // strip "station:" prefix → station name
+        else
+            src = raw_src;
 
         wxString tide_str = (comp >= 0)
             ? wxString::Format("+%.1f kt fair", comp)
