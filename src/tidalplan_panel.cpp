@@ -6,6 +6,9 @@
 #include <wx/sstream.h>
 #include <wx/tokenzr.h>
 #include <wx/datetime.h>
+#include <wx/filedlg.h>
+#include <wx/filename.h>
+#include <wx/file.h>
 #include <cmath>
 
 // ---------------------------------------------------------------------------
@@ -14,6 +17,8 @@
 enum {
     ID_REFRESH_ROUTES = wxID_HIGHEST + 1,
     ID_ROUTE_CHOICE,
+    ID_LOAD_GRIB,
+    ID_CLEAR_GRIB,
 };
 
 // ---------------------------------------------------------------------------
@@ -23,6 +28,8 @@ wxBEGIN_EVENT_TABLE(TidalPlanPanel, wxFrame)
     EVT_BUTTON(wxID_APPLY,        TidalPlanPanel::OnApplySettings)
     EVT_BUTTON(wxID_EXECUTE,      TidalPlanPanel::OnAnalyse)
     EVT_BUTTON(ID_REFRESH_ROUTES, TidalPlanPanel::OnRefreshRoutes)
+    EVT_BUTTON(ID_LOAD_GRIB,      TidalPlanPanel::OnLoadGrib)
+    EVT_BUTTON(ID_CLEAR_GRIB,     TidalPlanPanel::OnClearGrib)
     EVT_CHOICE(ID_ROUTE_CHOICE,   TidalPlanPanel::OnRouteSelected)
     EVT_LIST_ITEM_ACTIVATED(wxID_ANY, TidalPlanPanel::OnListItemActivated)
     EVT_CLOSE(TidalPlanPanel::OnClose)
@@ -76,6 +83,31 @@ TidalPlanPanel::TidalPlanPanel(wxWindow* parent,
     settings_box->Add(m_url_ctrl,  1, wxEXPAND | wxALL, 4);
     settings_box->Add(apply_btn,   0, wxALL | wxALIGN_CENTER_VERTICAL, 4);
     main_sizer->Add(settings_box, 0, wxEXPAND | wxALL, 4);
+
+    // ── GRIB wind strip ────────────────────────────────────────────────────
+    wxStaticBoxSizer* grib_box =
+        new wxStaticBoxSizer(wxHORIZONTAL, panel, "GRIB Wind (optional)");
+
+    m_grib_lbl = new wxStaticText(panel, wxID_ANY, "No GRIB loaded",
+                                  wxDefaultPosition, wxDefaultSize,
+                                  wxST_ELLIPSIZE_END);
+    m_grib_lbl->SetForegroundColour(wxColour(160, 160, 160));
+
+    wxButton* load_grib_btn = new wxButton(panel, ID_LOAD_GRIB, "Load GRIB…",
+                                           wxDefaultPosition, wxDefaultSize,
+                                           wxBU_EXACTFIT);
+    load_grib_btn->SetToolTip("Pick a GRIB wind file — uploaded to the TidalPlan server");
+
+    m_grib_clear_btn = new wxButton(panel, ID_CLEAR_GRIB, "✕",
+                                    wxDefaultPosition, wxDefaultSize,
+                                    wxBU_EXACTFIT);
+    m_grib_clear_btn->SetToolTip("Remove GRIB from server");
+    m_grib_clear_btn->Enable(false);
+
+    grib_box->Add(m_grib_lbl,       1, wxEXPAND | wxALL | wxALIGN_CENTER_VERTICAL, 4);
+    grib_box->Add(load_grib_btn,    0, wxALL | wxALIGN_CENTER_VERTICAL, 4);
+    grib_box->Add(m_grib_clear_btn, 0, wxALL | wxALIGN_CENTER_VERTICAL, 4);
+    main_sizer->Add(grib_box, 0, wxEXPAND | wxALL, 4);
 
     // ── Analysis parameters strip ──────────────────────────────────────────
     wxStaticBoxSizer* params_box =
@@ -180,6 +212,20 @@ TidalPlanPanel::TidalPlanPanel(wxWindow* parent,
 
     panel->SetSizer(main_sizer);
     panel->Layout();
+
+    // Check whether the server already has a GRIB loaded (e.g. from a previous session)
+    {
+        wxString ws;
+        if (GetFromServer("/api/wind/status", ws)) {
+            bool loaded = ws.Contains("\"loaded\":true") || ws.Contains("\"loaded\": true");
+            if (loaded) {
+                m_wind_loaded = true;
+                m_grib_lbl->SetLabel("GRIB loaded (from server)");
+                m_grib_lbl->SetForegroundColour(wxColour(100, 200, 100));
+                m_grib_clear_btn->Enable(true);
+            }
+        }
+    }
 
     // Populate the route dropdown now (panel is fully constructed)
     RefreshRouteList();
@@ -286,6 +332,164 @@ void TidalPlanPanel::OnApplySettings(wxCommandEvent&) {
     m_status_lbl->SetLabel(
         wxString::Format("Server set to %s", url));
     m_status_lbl->SetForegroundColour(wxColour(100, 200, 100));
+}
+
+// ---------------------------------------------------------------------------
+// GRIB — Load button: file picker → upload to server
+// ---------------------------------------------------------------------------
+void TidalPlanPanel::OnLoadGrib(wxCommandEvent&) {
+    wxFileDialog dlg(this, "Open GRIB wind file", wxEmptyString, wxEmptyString,
+                     "GRIB files (*.grb;*.grib;*.grb2;*.grib2)|*.grb;*.grib;*.grb2;*.grib2"
+                     "|All files (*.*)|*.*",
+                     wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+    if (dlg.ShowModal() != wxID_OK) return;
+
+    wxString filepath = dlg.GetPath();
+    wxString filename = wxFileName(filepath).GetFullName();
+
+    m_grib_lbl->SetLabel(wxString::Format("Uploading %s…", filename));
+    m_grib_lbl->SetForegroundColour(wxColour(200, 200, 80));
+    m_grib_clear_btn->Enable(false);
+    wxYield();
+
+    wxString error_msg;
+    if (UploadGribToServer(filepath, error_msg)) {
+        m_wind_loaded = true;
+        m_grib_lbl->SetLabel(wxString::Format("GRIB: %s", filename));
+        m_grib_lbl->SetForegroundColour(wxColour(100, 200, 100));
+        m_grib_clear_btn->Enable(true);
+        m_status_lbl->SetLabel(
+            "GRIB loaded — wind will appear in leg details after next Analyse.");
+        m_status_lbl->SetForegroundColour(wxColour(100, 200, 100));
+    } else {
+        m_wind_loaded = false;
+        m_grib_lbl->SetLabel(wxString::Format("Upload failed: %s", error_msg));
+        m_grib_lbl->SetForegroundColour(wxColour(220, 80, 80));
+        m_grib_clear_btn->Enable(false);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GRIB — Clear button: DELETE /api/wind/clear
+// ---------------------------------------------------------------------------
+void TidalPlanPanel::OnClearGrib(wxCommandEvent&) {
+    // Reuse GetFromServer helper but send DELETE — build a tiny wxHTTP DELETE call
+    wxString url_str = GetServerUrl();
+    if (url_str.EndsWith("/")) url_str.RemoveLast();
+    wxString host = url_str;
+    int port = 8081;
+    host.Replace("http://",  "", false);
+    host.Replace("https://", "", false);
+    int colon = host.Find(':');
+    if (colon != wxNOT_FOUND) {
+        long p;
+        if (host.Mid(colon + 1).ToLong(&p)) port = (int)p;
+        host = host.Left(colon);
+    }
+
+    wxHTTP http;
+    http.SetTimeout(5);
+    http.SetMethod("DELETE");
+    if (http.Connect(host, (unsigned short)port)) {
+        wxInputStream* stream = http.GetInputStream("/api/wind/clear");
+        delete stream;
+    }
+
+    m_wind_loaded = false;
+    m_grib_lbl->SetLabel("No GRIB loaded");
+    m_grib_lbl->SetForegroundColour(wxColour(160, 160, 160));
+    m_grib_clear_btn->Enable(false);
+}
+
+// ---------------------------------------------------------------------------
+// UploadGribToServer — multipart/form-data POST of a GRIB file
+// ---------------------------------------------------------------------------
+bool TidalPlanPanel::UploadGribToServer(const wxString& filepath,
+                                         wxString& error_msg) {
+    // Read the file into memory
+    wxFile file(filepath, wxFile::read);
+    if (!file.IsOpened()) {
+        error_msg = "Cannot open file";
+        return false;
+    }
+    wxFileOffset file_size = file.Length();
+    if (file_size <= 0) {
+        error_msg = "File is empty";
+        return false;
+    }
+
+    wxMemoryBuffer file_data;
+    void* buf_ptr = file_data.GetWriteBuf((size_t)file_size);
+    file.Read(buf_ptr, (size_t)file_size);
+    file_data.UngetWriteBuf((size_t)file_size);
+
+    // Build multipart/form-data body
+    wxString filename  = wxFileName(filepath).GetFullName();
+    wxString boundary  = "TidalPlanGrib1A2B3C4D";
+    wxString part_hdr  =
+        "--" + boundary + "\r\n"
+        "Content-Disposition: form-data; name=\"grib_file\"; filename=\"" +
+        filename + "\"\r\n"
+        "Content-Type: application/octet-stream\r\n"
+        "\r\n";
+    wxString closing = "\r\n--" + boundary + "--\r\n";
+
+    // Combine into a single buffer (header + binary file + footer)
+    wxMemoryBuffer post_buf;
+    {
+        wxCharBuffer hdr = part_hdr.ToAscii();
+        post_buf.AppendData(hdr.data(), hdr.length());
+    }
+    post_buf.AppendData(file_data.GetData(), file_data.GetDataLen());
+    {
+        wxCharBuffer cls = closing.ToAscii();
+        post_buf.AppendData(cls.data(), cls.length());
+    }
+
+    // Parse host / port
+    wxString url_str = GetServerUrl();
+    if (url_str.EndsWith("/")) url_str.RemoveLast();
+    wxString host = url_str;
+    int port = 8081;
+    host.Replace("http://",  "", false);
+    host.Replace("https://", "", false);
+    int colon = host.Find(':');
+    if (colon != wxNOT_FOUND) {
+        long p;
+        if (host.Mid(colon + 1).ToLong(&p)) port = (int)p;
+        host = host.Left(colon);
+    }
+
+    wxString content_type =
+        "multipart/form-data; boundary=" + boundary;
+
+    wxHTTP http;
+    http.SetPostBuffer(content_type, post_buf);
+    http.SetTimeout(60);   // large GRIB files may take a moment
+
+    if (!http.Connect(host, (unsigned short)port)) {
+        error_msg = "Cannot connect to server";
+        return false;
+    }
+
+    wxInputStream* stream = http.GetInputStream("/api/wind/upload");
+    if (!stream) {
+        error_msg = "No response from server";
+        return false;
+    }
+
+    int code = http.GetResponse();
+    wxString resp;
+    wxStringOutputStream ss(&resp);
+    stream->Read(ss);
+    delete stream;
+
+    if (code != 200) {
+        error_msg = wxString::Format("Server error %d", code);
+        return false;
+    }
+
+    return true;
 }
 
 // ---------------------------------------------------------------------------

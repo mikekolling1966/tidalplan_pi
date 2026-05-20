@@ -48,6 +48,8 @@ private:
     void OnListItemActivated(wxListEvent& event);  // double-click → detail popup
     void OnRefreshRoutes(wxCommandEvent& event);   // ↺ button next to route choice
     void OnRouteSelected(wxCommandEvent& event);   // route dropdown selection change
+    void OnLoadGrib(wxCommandEvent& event);        // file picker → upload GRIB to server
+    void OnClearGrib(wxCommandEvent& event);       // remove GRIB from server
     void OnClose(wxCloseEvent& event);             // hide instead of destroy
 
     // --- Core logic ---
@@ -61,6 +63,10 @@ private:
 
     // HTTP GET to <server_url><path>.  Returns true on HTTP 200.
     bool GetFromServer(const wxString& path, wxString& response);
+
+    // Multipart POST to upload a GRIB file to /api/wind/upload.
+    // Returns true on success; sets error_msg on failure.
+    bool UploadGribToServer(const wxString& filepath, wxString& error_msg);
 
     // Convert compass bearing (degrees) to 16-point cardinal string.
     static wxString BearingToCardinal(double deg);
@@ -98,6 +104,10 @@ private:
 
     // True when the server has a GRIB wind file loaded
     bool m_wind_loaded;
+
+    // GRIB strip widgets
+    wxStaticText* m_grib_lbl;
+    wxButton*     m_grib_clear_btn;
 
     wxDECLARE_EVENT_TABLE();
 };
