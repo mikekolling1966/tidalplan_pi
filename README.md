@@ -23,8 +23,9 @@ Ranked departure windows shown in floating panel, colour-coded by score
 - **Route dropdown** — pick any saved route; no need to right-click → Activate
 - **Date + time range** — set start/end date (limited to next 7 days) and hour
 - **Vessel speed** — adjustable knot spinner
+- **GRIB wind** — load a `.grb`/`.grib` file directly from the panel; uploaded to the TidalPlan server automatically, no curl required
 - **Results list** — top 20 windows ranked by tidal score with ★ rating and colour coding
-- **Leg breakdown** — double-click any row for a per-leg tidal stream summary
+- **Leg breakdown** — double-click any row for a per-leg summary showing tidal stream, data source (`Station / CMEMS` or just `Station` for harmonic fallback), and wind speed/direction when a GRIB is loaded
 - **Embedded icon** — compass/wave toolbar button baked into the binary
 
 ## Panel layout
@@ -34,20 +35,39 @@ Ranked departure windows shown in floating panel, colour-coded by score
 │  [Queenborough to Ramsgate 2025                    ▼]  [↺]    │
 ├─ Server ───────────────────────────────────────────────────────┤
 │  [http://192.168.1.30:8081                     ]  [Apply]      │
+├─ GRIB Wind (optional) ─────────────────────────────────────────┤
+│  [GRIB: METEOCONSULT12Z_VENT_0520…grb      ] [Load GRIB…] [✕] │
 ├─ Analysis window ──────────────────────────────────────────────┤
 │  Speed: [10.0] kt                                              │
 │  From: [21/05/2026] [06] :00   To: [21/05/2026] [22] :00      │
 ├────────────────────────────────────────────────────────────────┤
 │  [▶ Analyse Route]                                             │
 ├────────────────────────────────────────────────────────────────┤
-│  Best: Thu 21 May 04:00  (48 windows tested)                   │
+│  Best: Thu 21 May 16:00  (10 windows tested)                   │
 ├───┬──────────────────┬──────────────────┬──────┬──────────────┤
 │ # │ Depart           │ ETA              │ Hrs  │ Score        │
-│ 1 │ Thu 21 May 04:00 │ Thu 21 May 07:06 │  3.0 │ ★★★★  100   │
-│ 2 │ Thu 21 May 04:30 │ Thu 21 May 07:36 │  3.1 │ ★★★★  100   │
+│ 1 │ Thu 21 May 16:00 │ Thu 21 May 19:04 │  3.1 │ ★★★★  100   │
+│ 2 │ Thu 21 May 16:30 │ Thu 21 May 19:33 │  3.0 │ ★★★★  100   │
 │...│                  │                  │      │              │
 └───┴──────────────────┴──────────────────┴──────┴──────────────┘
 ```
+
+### Leg detail popup (double-click a row)
+
+```
+Departure:  2026-05-21T15:30
+ETA:        2026-05-21T18:37
+Passage:    3.1 hours
+Score:      99  (Excellent)
+
+Legs:
+  Leg 1: 1.1 nm  hdg 20°  tide +0.5 kt fair  [SHEERNESS / CMEMS]  wind 4 kt from S
+  Leg 2: 0.7 nm  hdg 62°  tide +0.9 kt fair  [SHEERNESS / CMEMS]  wind 5 kt from S
+  Leg 5: 10.0 nm hdg 105° tide +0.7 kt fair  [Herne Bay / CMEMS]  wind 6 kt from SSW
+  ...
+```
+
+Source label shows `Station / CMEMS` when the tidal current came from the CMEMS model, or just `Station` when the server fell back to harmonic data (e.g. very shallow inshore legs outside the CMEMS grid). Wind line only appears when a GRIB is loaded.
 
 ## Requirements
 
@@ -96,14 +116,15 @@ cp build/libtidalplan_pi.dylib \
 1. Open the TidalPlan panel from the toolbar
 2. Select a route from the dropdown (click **↺** to refresh if you just drew one)
 3. Set the server URL if needed (default: `http://192.168.1.30:8081`)
-4. Set vessel speed, date range, and the departure hour window
-5. Click **▶ Analyse Route**
-6. Top 20 departure windows appear, ranked and colour-coded:
+4. *(Optional)* Click **Load GRIB…** to pick a wind forecast file — the same `.grb`/`.grib` file you'd load in OpenCPN's GRIB plugin. It is uploaded to the TidalPlan server automatically and wind speed/direction will appear in the leg detail popup
+5. Set vessel speed, date range, and the departure hour window
+6. Click **▶ Analyse Route**
+7. Top 20 departure windows appear, ranked and colour-coded:
    - 🟢 Dark green — excellent (score ≥ 75)
    - 🟡 Dark yellow — good (score ≥ 50)
    - 🟠 Dark orange — fair (score ≥ 25)
    - 🔴 Dark red — poor
-7. Double-click any row for a per-leg tidal stream breakdown
+8. Double-click any row for a per-leg breakdown: tidal stream, data source, and wind (if GRIB loaded)
 
 ## JSON request format
 
