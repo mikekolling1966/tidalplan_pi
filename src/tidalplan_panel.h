@@ -59,6 +59,12 @@ private:
     // Returns true and fills `response` on HTTP 200, false otherwise.
     bool PostToServer(const wxString& json_body, wxString& response);
 
+    // HTTP GET to <server_url><path>.  Returns true on HTTP 200.
+    bool GetFromServer(const wxString& path, wxString& response);
+
+    // Convert compass bearing (degrees) to 16-point cardinal string.
+    static wxString BearingToCardinal(double deg);
+
     // Parses the JSON response and populates m_results_list.
     void PopulateResults(const wxString& json_response);
 
@@ -89,6 +95,9 @@ private:
 
     // Raw JSON of the last successful response (for detail popup)
     wxString m_last_response;
+
+    // True when the server has a GRIB wind file loaded
+    bool m_wind_loaded;
 
     wxDECLARE_EVENT_TABLE();
 };

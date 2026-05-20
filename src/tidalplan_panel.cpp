@@ -6,6 +6,7 @@
 #include <wx/sstream.h>
 #include <wx/tokenzr.h>
 #include <wx/datetime.h>
+#include <cmath>
 
 // ---------------------------------------------------------------------------
 // Custom event IDs
@@ -38,6 +39,7 @@ TidalPlanPanel::TidalPlanPanel(wxWindow* parent,
               wxDefaultPosition, wxSize(440, 520),
               wxDEFAULT_FRAME_STYLE | wxFRAME_FLOAT_ON_PARENT)
     , m_route_guid(active_route_guid)
+    , m_wind_loaded(false)
 {
     wxPanel* panel = new wxPanel(this, wxID_ANY);
     wxBoxSizer* main_sizer = new wxBoxSizer(wxVERTICAL);
@@ -321,6 +323,15 @@ void TidalPlanPanel::OnAnalyse(wxCommandEvent&) {
 
     m_last_response = response;
     PopulateResults(response);
+
+    // Check whether a GRIB wind file is loaded — result used in the leg popup
+    wxString wind_status;
+    if (GetFromServer("/api/wind/status", wind_status))
+        m_wind_loaded = wind_status.Contains("\"loaded\":true") ||
+                        wind_status.Contains("\"loaded\": true");
+    else
+        m_wind_loaded = false;
+
     m_analyse_btn->Enable();
 }
 
@@ -463,6 +474,51 @@ bool TidalPlanPanel::PostToServer(const wxString& json_body,
     }
 
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// GetFromServer — HTTP GET helper (used for wind/status etc.)
+// ---------------------------------------------------------------------------
+bool TidalPlanPanel::GetFromServer(const wxString& path, wxString& response) {
+    wxString url_str = GetServerUrl();
+    if (url_str.EndsWith("/")) url_str.RemoveLast();
+
+    wxString host = url_str;
+    int port = 8081;
+    host.Replace("http://",  "", false);
+    host.Replace("https://", "", false);
+    int colon = host.Find(':');
+    if (colon != wxNOT_FOUND) {
+        long p;
+        if (host.Mid(colon + 1).ToLong(&p)) port = (int)p;
+        host = host.Left(colon);
+    }
+
+    wxHTTP http;
+    http.SetTimeout(5);
+    if (!http.Connect(host, (unsigned short)port)) return false;
+
+    wxInputStream* stream = http.GetInputStream(path);
+    if (!stream) return false;
+
+    wxStringOutputStream ss(&response);
+    stream->Read(ss);
+    delete stream;
+    return http.GetResponse() == 200;
+}
+
+// ---------------------------------------------------------------------------
+// BearingToCardinal — convert degrees to 16-point compass rose label
+// ---------------------------------------------------------------------------
+/*static*/ wxString TidalPlanPanel::BearingToCardinal(double deg) {
+    static const wxString kCards[16] = {
+        "N","NNE","NE","ENE","E","ESE","SE","SSE",
+        "S","SSW","SW","WSW","W","WNW","NW","NNW"
+    };
+    // Normalise 0-360, then divide into 16 sectors of 22.5°
+    deg = fmod(deg + 360.0, 360.0);
+    int idx = (int)((deg + 11.25) / 22.5) % 16;
+    return kCards[idx];
 }
 
 // ---------------------------------------------------------------------------
@@ -627,23 +683,35 @@ void TidalPlanPanel::OnListItemActivated(wxListEvent& event) {
         double   dist  = JsonGetDouble(leg_chunk, "distance_nm");
         double   hdg   = JsonGetDouble(leg_chunk, "heading");
         double   comp  = JsonGetDouble(leg_chunk, "stream_component_kt");
-        // "source" is "cmems" or "station:NAME" — format for display
+
+        // Build source label: "Station / CMEMS" or just "Station"
+        wxString station = JsonGetString(leg_chunk, "station");
         wxString raw_src = JsonGetString(leg_chunk, "source");
-        wxString src;
-        if (raw_src == "cmems")
-            src = "CMEMS";
-        else if (raw_src.StartsWith("station:"))
-            src = raw_src.Mid(8);   // strip "station:" prefix → station name
-        else
-            src = raw_src;
+        wxString src_label;
+        if (raw_src.CmpNoCase("cmems") == 0) {
+            src_label = station.IsEmpty() ? "CMEMS" : station + " / CMEMS";
+        } else if (raw_src.StartsWith("station:")) {
+            src_label = raw_src.Mid(8);   // harmonic fallback — just station name
+        } else {
+            src_label = station.IsEmpty() ? raw_src : station;
+        }
 
         wxString tide_str = (comp >= 0)
             ? wxString::Format("+%.1f kt fair", comp)
             : wxString::Format("%.1f kt foul",  comp);
 
+        // Wind — only shown when a GRIB file is loaded on the server
+        wxString wind_str;
+        if (m_wind_loaded) {
+            double wind_spd = JsonGetDouble(leg_chunk, "wind_speed_kt");
+            double wind_dir = JsonGetDouble(leg_chunk, "wind_direction");
+            wind_str = wxString::Format("  wind %.0f kt from %s",
+                                        wind_spd, BearingToCardinal(wind_dir));
+        }
+
         summary += wxString::Format(
-            "  Leg %d: %.1f nm  hdg %.0f\xc2\xb0  tide %s  [%s]\n",
-            leg_num++, dist, hdg, tide_str, src);
+            "  Leg %d: %.1f nm  hdg %.0f\xc2\xb0  tide %s  [%s]%s\n",
+            leg_num++, dist, hdg, tide_str, src_label, wind_str);
 
         leg_search = (next_leg == wxString::npos) ? chunk.Length() : next_leg;
     }
