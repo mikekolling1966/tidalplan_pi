@@ -80,6 +80,59 @@ Source label shows `Station / CMEMS` when the tidal current came from the CMEMS 
 | wxWidgets | 3.2 (Homebrew `wxwidgets@3.2`) — headers only at build time |
 | C++ | 17 |
 
+## Build & Install (Linux / Raspberry Pi)
+
+Tested on Raspberry Pi OS Bookworm ARM64 (Debian 12) with OpenCPN 5.14 built from source.
+
+```bash
+# 1. Install build dependencies
+sudo apt install -y cmake git libwxgtk3.2-dev
+
+# 2. Clone and build
+git clone https://github.com/mikekolling1966/tidalplan_pi.git
+cd tidalplan_pi
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+# Produces: build/libtidalplan_pi.so  (lib prefix is required on Linux)
+
+# 3. Copy to the user plugin directory (NOT /usr/local/lib/opencpn/)
+mkdir -p ~/.local/lib/opencpn/
+cp build/libtidalplan_pi.so ~/.local/lib/opencpn/
+
+# 4. Create install data so OpenCPN recognises it
+mkdir -p ~/.opencpn/plugins/install_data
+printf '/home/pi/.local/lib/\n/home/pi/.local/lib/opencpn/\n/home/pi/.local/lib/opencpn/libtidalplan_pi.so\n' \
+  > ~/.opencpn/plugins/install_data/tidalplan.files
+printf 'lib: /home/pi/.local/lib\nbin: /home/pi/.local/bin\n' \
+  > ~/.opencpn/plugins/install_data/tidalplan.dirs
+echo '1.0.0' > ~/.opencpn/plugins/install_data/tidalplan.version
+
+# 5. Add a catalog entry (while OpenCPN is closed)
+python3 - <<'PY'
+entry = """  <plugin version="1">
+    <name>TidalPlan</name><version>1.0.0</version><release>0</release>
+    <summary>Tidal departure window analyser</summary>
+    <api-version>1.16</api-version><open-source>yes</open-source>
+    <target>debian-arm64</target><target-version>12</target-version>
+    <target-arch>arm64</target-arch>
+    <tarball-url>file:///home/pi/.local/lib/opencpn/libtidalplan_pi.so</tarball-url>
+  </plugin>\n"""
+import os; path = os.path.expanduser('~/.opencpn/ocpn-plugins.xml')
+c = open(path).read()
+if 'TidalPlan' not in c:
+    open(path,'w').write(c.replace('</plugins>', entry+'</plugins>'))
+    print('Added')
+PY
+
+# 6. Start OpenCPN — TidalPlan appears in Preferences → Plugins, enable it
+```
+
+> **Key gotcha:** The plugin must be in `~/.local/lib/opencpn/` (user dir), not
+> `/usr/local/lib/opencpn/` (system dir). Plugins in the system dir without a
+> catalog entry are silently skipped after the candidate scan (log line 505)
+> and never reach the compatibility check (line 596). Also `opencpn.conf` is
+> rewritten on every OpenCPN exit — only edit it while OpenCPN is closed.
+
 ## Build (macOS)
 
 ```bash
@@ -103,7 +156,7 @@ cp build/libtidalplan_pi.dylib \
 > (`/Applications/OpenCPN.app/Contents/Frameworks/libwx_*.dylib`) — no separate
 > wxWidgets install is needed at runtime.
 
-## Install
+## Install (macOS)
 
 1. Copy `libtidalplan_pi.dylib` to `~/Library/Application Support/OpenCPN/Contents/PlugIns/`
 2. Start OpenCPN
