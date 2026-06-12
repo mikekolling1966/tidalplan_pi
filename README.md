@@ -28,6 +28,12 @@ Ranked departure windows shown in floating panel, colour-coded by score
 - **Leg breakdown** — double-click any row for a per-leg summary showing tidal stream, data source (`Station / CMEMS` or just `Station` for harmonic fallback), and wind speed/direction when a GRIB is loaded
 - **Embedded icon** — compass/wave toolbar button baked into the binary
 
+## Screenshot
+
+![TidalPlan plugin running in OpenCPN 5.14 on Raspberry Pi — showing departure window analysis and leg detail popup](docs/opencpn_plugin_screenshot.jpg)
+
+*TidalPlan running in OpenCPN 5.14 on a Raspberry Pi 5 (BlueBox). Left: the plugin panel showing 20 ranked departure windows for a route near Sunk Head, Thames Estuary. Right: the leg detail popup showing tidal stream data from the CMEMS 1.5 km hydrodynamic model.*
+
 ## Panel layout
 
 ```
