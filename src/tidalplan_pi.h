@@ -8,7 +8,7 @@ class TidalPlanPanel;
 // Version constants
 // ---------------------------------------------------------------------------
 static const int TIDALPLAN_API_VERSION_MAJOR = 1;
-static const int TIDALPLAN_API_VERSION_MINOR = 18;  // Requires OpenCPN 5.6+
+static const int TIDALPLAN_API_VERSION_MINOR = 16;
 static const int TIDALPLAN_VERSION_MAJOR     = 1;
 static const int TIDALPLAN_VERSION_MINOR     = 0;
 
@@ -22,7 +22,7 @@ static const int TIDALPLAN_VERSION_MINOR     = 0;
 //   - Create and show/hide the TidalPlanPanel side panel
 //   - Persist settings (server URL, vessel speed) to OpenCPN config
 // ---------------------------------------------------------------------------
-class TidalPlanPlugin : public opencpn_plugin_118 {
+class TidalPlanPlugin : public opencpn_plugin_116 {
 public:
     explicit TidalPlanPlugin(void* ppimgr);
     ~TidalPlanPlugin() override;

@@ -109,8 +109,7 @@ elseif(UNIX)
         -Wl,--allow-shlib-undefined
     )
 
-    # Strip the lib prefix so OpenCPN finds "tidalplan_pi.so" not "libtidalplan_pi.so"
-    set_target_properties(tidalplan_pi PROPERTIES PREFIX "")
+    # OpenCPN on Linux requires the lib prefix (lib*_pi.so)
 
     set(PLUGIN_INSTALL_DIR
         "$ENV{HOME}/.opencpn/plugins"

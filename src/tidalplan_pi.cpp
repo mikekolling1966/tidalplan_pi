@@ -22,7 +22,7 @@ extern "C" {
 // Constructor / Destructor
 // ---------------------------------------------------------------------------
 TidalPlanPlugin::TidalPlanPlugin(void* ppimgr)
-    : opencpn_plugin_118(ppimgr)
+    : opencpn_plugin_116(ppimgr)
     , m_toolbar_item_id(-1)
     , m_icon_bmp(nullptr)
     , m_panel(nullptr)
